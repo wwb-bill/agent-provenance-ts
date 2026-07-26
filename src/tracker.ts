@@ -1,0 +1,8 @@
+import{createHash}from"crypto";import type{ActionRecord,ReputationScore,ProvenanceChain}from"./types.js";
+function sha256(s:string):string{return createHash("sha256").update(s).digest("hex");}
+export class ProvenanceTracker{private chains=new Map<string,ActionRecord[]>();
+ record(agentId:string,action:string,success:boolean):ActionRecord{const chain=this.chains.get(agentId)||[];const ph=chain.length>0?chain[chain.length-1].hash:sha256(agentId);const hash=sha256(`${agentId}:${action}:${ph}:${Date.now()}`);const rec:ActionRecord={agentId,action,hash,previousHash:ph,timestamp:Date.now(),success};chain.push(rec);this.chains.set(agentId,chain);return rec;}
+ verify(agentId:string):boolean{const chain=this.chains.get(agentId);if(!chain||chain.length===0)return true;let ph=sha256(agentId);for(const rec of chain){if(rec.previousHash!==ph)return false;const expected=sha256(`${agentId}:${rec.action}:${ph}:${rec.timestamp}`);if(rec.hash!==expected)return false;ph=rec.hash;}return true;}
+ reputation(agentId:string):ReputationScore{const chain=this.chains.get(agentId)||[];const total=chain.length;const succ=chain.filter(r=>r.success).length;const rate=total>0?succ/total:0;const trust:"high"|"medium"|"low"=rate>=.9?"high":rate>=.6?"medium":"low";return{agentId,totalActions:total,successRate:Math.round(rate*100)/100,trustLevel:trust};}
+ getChain(agentId:string):ProvenanceChain{return{agentId,actions:this.chains.get(agentId)||[],verified:this.verify(agentId)};}
+ actionCount(agentId:string):number{return(this.chains.get(agentId)||[]).length;}}
